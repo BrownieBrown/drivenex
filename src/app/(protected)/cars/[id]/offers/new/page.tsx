@@ -3,7 +3,7 @@
 import { useState } from 'react'
 import { useRouter, useParams } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
-import { Card, Button, Input, Select } from '@/components/ui'
+import { Card, Button, Input, Select, useToast } from '@/components/ui'
 import type { OfferType } from '@/types/database'
 
 const offerTypeOptions = [
@@ -32,13 +32,22 @@ interface FormData {
   notes: string
 }
 
+interface ValidationErrors {
+  name?: string
+  monthly_payment?: string
+  duration_months?: string
+  km_per_year?: string
+}
+
 export default function NewOfferPage() {
   const { id: carId } = useParams<{ id: string }>()
   const router = useRouter()
   const supabase = createClient()
+  const toast = useToast()
   const [step, setStep] = useState(1)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [validationErrors, setValidationErrors] = useState<ValidationErrors>({})
 
   const [formData, setFormData] = useState<FormData>({
     type: 'lease',
@@ -60,8 +69,51 @@ export default function NewOfferPage() {
     notes: '',
   })
 
+  const validate = (): boolean => {
+    const errors: ValidationErrors = {}
+
+    if (!formData.name.trim()) {
+      errors.name = 'Offer name is required'
+    }
+
+    const monthlyPayment = parseFloat(formData.monthly_payment)
+    if (!formData.monthly_payment || isNaN(monthlyPayment)) {
+      errors.monthly_payment = 'Monthly payment is required'
+    } else if (monthlyPayment <= 0) {
+      errors.monthly_payment = 'Monthly payment must be greater than 0'
+    }
+
+    const duration = parseInt(formData.duration_months)
+    if (!formData.duration_months || isNaN(duration)) {
+      errors.duration_months = 'Contract duration is required'
+    } else if (duration < 1 || duration > 120) {
+      errors.duration_months = 'Duration must be between 1 and 120 months'
+    }
+
+    const kmPerYear = parseInt(formData.km_per_year)
+    if (!formData.km_per_year || isNaN(kmPerYear)) {
+      errors.km_per_year = 'Included km/year is required'
+    } else if (kmPerYear < 1000 || kmPerYear > 100000) {
+      errors.km_per_year = 'km/year must be between 1,000 and 100,000'
+    }
+
+    setValidationErrors(errors)
+    return Object.keys(errors).length === 0
+  }
+
   const handleSubmit = async () => {
     setError(null)
+
+    if (!validate()) {
+      // Navigate to step with errors
+      if (validationErrors.name) {
+        setStep(1)
+      } else if (validationErrors.monthly_payment || validationErrors.duration_months || validationErrors.km_per_year) {
+        setStep(2)
+      }
+      return
+    }
+
     setLoading(true)
 
     const { data: { user } } = await supabase.auth.getUser()
@@ -75,9 +127,9 @@ export default function NewOfferPage() {
       car_id: carId,
       user_id: user.id,
       type: formData.type,
-      name: formData.name,
-      source_url: formData.source_url || null,
-      source_name: formData.source_name || null,
+      name: formData.name.trim(),
+      source_url: formData.source_url.trim() || null,
+      source_name: formData.source_name.trim() || null,
       monthly_payment: parseFloat(formData.monthly_payment),
       down_payment: parseFloat(formData.down_payment) || 0,
       duration_months: parseInt(formData.duration_months),
@@ -90,15 +142,22 @@ export default function NewOfferPage() {
       transfer_fee: parseFloat(formData.transfer_fee) || 0,
       residual_value: formData.residual_value ? parseFloat(formData.residual_value) : null,
       financing_rate: formData.financing_rate ? parseFloat(formData.financing_rate) : null,
-      notes: formData.notes || null,
+      notes: formData.notes.trim() || null,
     } as never)
 
     if (insertError) {
       setError(insertError.message)
       setLoading(false)
     } else {
+      toast.success('Offer added successfully')
       router.push(`/cars/${carId}`)
       router.refresh()
+    }
+  }
+
+  const clearFieldError = (field: keyof ValidationErrors) => {
+    if (validationErrors[field]) {
+      setValidationErrors({ ...validationErrors, [field]: undefined })
     }
   }
 
@@ -166,8 +225,12 @@ export default function NewOfferPage() {
                 placeholder="e.g., VW Leasing Spring Deal"
                 required
                 value={formData.name}
-                onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                onChange={(e) => {
+                  setFormData({ ...formData, name: e.target.value })
+                  clearFieldError('name')
+                }}
                 hint="Give this offer a memorable name"
+                error={validationErrors.name}
               />
 
               <div className="bg-indigo-50 border border-indigo-200 rounded-lg p-4">
@@ -207,7 +270,11 @@ export default function NewOfferPage() {
                 placeholder="e.g., 399"
                 required
                 value={formData.monthly_payment}
-                onChange={(e) => setFormData({ ...formData, monthly_payment: e.target.value })}
+                onChange={(e) => {
+                  setFormData({ ...formData, monthly_payment: e.target.value })
+                  clearFieldError('monthly_payment')
+                }}
+                error={validationErrors.monthly_payment}
               />
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -241,7 +308,11 @@ export default function NewOfferPage() {
                   placeholder="24"
                   required
                   value={formData.duration_months}
-                  onChange={(e) => setFormData({ ...formData, duration_months: e.target.value })}
+                  onChange={(e) => {
+                    setFormData({ ...formData, duration_months: e.target.value })
+                    clearFieldError('duration_months')
+                  }}
+                  error={validationErrors.duration_months}
                 />
                 <Input
                   id="km_per_year"
@@ -250,7 +321,11 @@ export default function NewOfferPage() {
                   placeholder="10000"
                   required
                   value={formData.km_per_year}
-                  onChange={(e) => setFormData({ ...formData, km_per_year: e.target.value })}
+                  onChange={(e) => {
+                    setFormData({ ...formData, km_per_year: e.target.value })
+                    clearFieldError('km_per_year')
+                  }}
+                  error={validationErrors.km_per_year}
                 />
               </div>
 

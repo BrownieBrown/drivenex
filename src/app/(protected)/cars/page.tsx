@@ -1,6 +1,7 @@
 import { createClient } from '@/lib/supabase/server'
 import Link from 'next/link'
 import { Card, Button } from '@/components/ui'
+import { findPresetForCar } from '@/lib/ev-presets'
 import type { Car } from '@/types/database'
 
 type CarWithOfferCount = Car & { offers: { count: number }[] }
@@ -45,6 +46,7 @@ export default async function CarsPage() {
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {cars.map((car) => {
             const offerCount = (car.offers as { count: number }[])?.[0]?.count ?? 0
+            const preset = car.fuel_type === 'bev' ? findPresetForCar(car) : undefined
             return (
               <Link key={car.id} href={`/cars/${car.id}`}>
                 <Card className="hover:shadow-md transition-shadow cursor-pointer h-full">
@@ -54,9 +56,16 @@ export default async function CarsPage() {
                         {car.fuel_type === 'bev' ? '⚡' : '⛽'}
                       </span>
                     </div>
-                    <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-indigo-100 text-indigo-800">
-                      {offerCount} {offerCount === 1 ? 'offer' : 'offers'}
-                    </span>
+                    <div className="flex items-center gap-2">
+                      {preset && (
+                        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">
+                          {preset.rating.toFixed(1)} ★
+                        </span>
+                      )}
+                      <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-indigo-100 text-indigo-800">
+                        {offerCount} {offerCount === 1 ? 'offer' : 'offers'}
+                      </span>
+                    </div>
                   </div>
 
                   <div className="mt-4">

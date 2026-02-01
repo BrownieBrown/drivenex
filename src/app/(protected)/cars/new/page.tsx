@@ -1,9 +1,10 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
-import { Card, Button, Input, Select } from '@/components/ui'
+import { Card, Button, Input, Select, useToast } from '@/components/ui'
+import { EV_PRESETS, searchPresets, type EVPreset } from '@/lib/ev-presets'
 import type { FuelType } from '@/types/database'
 
 const fuelTypeOptions = [
@@ -13,11 +14,23 @@ const fuelTypeOptions = [
   { value: 'hybrid', label: 'Hybrid' },
 ]
 
+interface ValidationErrors {
+  brand?: string
+  model?: string
+}
+
 export default function NewCarPage() {
   const router = useRouter()
   const supabase = createClient()
+  const toast = useToast()
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [validationErrors, setValidationErrors] = useState<ValidationErrors>({})
+
+  // EV Preset search state
+  const [searchQuery, setSearchQuery] = useState('')
+  const [showPresets, setShowPresets] = useState(false)
+  const [selectedPreset, setSelectedPreset] = useState<EVPreset | null>(null)
 
   const [formData, setFormData] = useState({
     brand: '',
@@ -30,9 +43,65 @@ export default function NewCarPage() {
     consumption: '',
   })
 
+  // Filter presets based on search query
+  const filteredPresets = useMemo(() => {
+    if (!searchQuery) return EV_PRESETS.slice(0, 8) // Show first 8 by default
+    return searchPresets(searchQuery)
+  }, [searchQuery])
+
+  const handlePresetSelect = (preset: EVPreset) => {
+    setSelectedPreset(preset)
+    setFormData({
+      brand: preset.brand,
+      model: preset.model,
+      variant: preset.variant,
+      fuel_type: preset.fuel_type,
+      power_kw: preset.power_kw.toString(),
+      co2_emissions: '',
+      battery_kwh: preset.battery_kwh.toString(),
+      consumption: preset.consumption.toString(),
+    })
+    setSearchQuery('')
+    setShowPresets(false)
+    setValidationErrors({})
+  }
+
+  const clearPreset = () => {
+    setSelectedPreset(null)
+    setFormData({
+      brand: '',
+      model: '',
+      variant: '',
+      fuel_type: 'bev',
+      power_kw: '',
+      co2_emissions: '',
+      battery_kwh: '',
+      consumption: '',
+    })
+  }
+
+  const validate = (): boolean => {
+    const errors: ValidationErrors = {}
+
+    if (!formData.brand.trim()) {
+      errors.brand = 'Brand is required'
+    }
+    if (!formData.model.trim()) {
+      errors.model = 'Model is required'
+    }
+
+    setValidationErrors(errors)
+    return Object.keys(errors).length === 0
+  }
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setError(null)
+
+    if (!validate()) {
+      return
+    }
+
     setLoading(true)
 
     const { data: { user } } = await supabase.auth.getUser()
@@ -44,9 +113,9 @@ export default function NewCarPage() {
 
     const { error: insertError } = await supabase.from('cars').insert({
       user_id: user.id,
-      brand: formData.brand,
-      model: formData.model,
-      variant: formData.variant || null,
+      brand: formData.brand.trim(),
+      model: formData.model.trim(),
+      variant: formData.variant.trim() || null,
       fuel_type: formData.fuel_type,
       power_kw: formData.power_kw ? parseInt(formData.power_kw) : null,
       co2_emissions: formData.co2_emissions ? parseInt(formData.co2_emissions) : null,
@@ -58,6 +127,7 @@ export default function NewCarPage() {
       setError(insertError.message)
       setLoading(false)
     } else {
+      toast.success('Car added successfully')
       router.push('/cars')
       router.refresh()
     }
@@ -74,6 +144,81 @@ export default function NewCarPage() {
         </p>
       </div>
 
+      {/* EV Quick Select */}
+      <Card className="mb-6 bg-gradient-to-r from-indigo-50 to-purple-50 border-indigo-200">
+        <div className="flex items-center gap-3 mb-4">
+          <span className="text-2xl">⚡</span>
+          <div>
+            <h2 className="text-lg font-semibold text-gray-900">Quick Select EV</h2>
+            <p className="text-sm text-gray-600">Search for a BYD model to auto-fill specifications</p>
+          </div>
+        </div>
+
+        {selectedPreset ? (
+          <div className="flex items-center justify-between bg-white rounded-lg p-3 border border-indigo-200">
+            <div>
+              <p className="font-medium text-gray-900">
+                {selectedPreset.brand} {selectedPreset.model}
+              </p>
+              <p className="text-sm text-gray-500">{selectedPreset.variant}</p>
+            </div>
+            <Button variant="secondary" size="sm" onClick={clearPreset}>
+              Clear
+            </Button>
+          </div>
+        ) : (
+          <div className="relative">
+            <Input
+              id="ev-search"
+              placeholder="Search BYD Atto 3, Dolphin, Seal..."
+              value={searchQuery}
+              onChange={(e) => {
+                setSearchQuery(e.target.value)
+                setShowPresets(true)
+              }}
+              onFocus={() => setShowPresets(true)}
+            />
+            {showPresets && (
+              <div className="absolute z-10 mt-1 w-full bg-white border border-gray-200 rounded-lg shadow-lg max-h-64 overflow-y-auto">
+                {filteredPresets.length === 0 ? (
+                  <div className="p-3 text-sm text-gray-500">No matching EVs found</div>
+                ) : (
+                  filteredPresets.map((preset) => (
+                    <button
+                      key={preset.id}
+                      type="button"
+                      onClick={() => handlePresetSelect(preset)}
+                      className="w-full text-left px-4 py-3 hover:bg-indigo-50 border-b border-gray-100 last:border-b-0 transition-colors"
+                    >
+                      <div className="flex justify-between items-start">
+                        <div>
+                          <p className="font-medium text-gray-900">
+                            {preset.brand} {preset.model}
+                          </p>
+                          <p className="text-sm text-gray-500">{preset.variant}</p>
+                        </div>
+                        <div className="text-right text-sm">
+                          <p className="text-indigo-600 font-medium">{preset.battery_kwh} kWh</p>
+                          <p className="text-gray-400">{preset.power_kw} kW</p>
+                        </div>
+                      </div>
+                    </button>
+                  ))
+                )}
+                <button
+                  type="button"
+                  onClick={() => setShowPresets(false)}
+                  className="w-full text-center py-2 text-sm text-gray-500 hover:text-gray-700 bg-gray-50"
+                >
+                  Close
+                </button>
+              </div>
+            )}
+          </div>
+        )}
+      </Card>
+
+      {/* Manual Entry Form */}
       <Card>
         <form onSubmit={handleSubmit} className="space-y-6">
           {error && (
@@ -89,7 +234,13 @@ export default function NewCarPage() {
               placeholder="e.g., Volkswagen"
               required
               value={formData.brand}
-              onChange={(e) => setFormData({ ...formData, brand: e.target.value })}
+              onChange={(e) => {
+                setFormData({ ...formData, brand: e.target.value })
+                if (validationErrors.brand) {
+                  setValidationErrors({ ...validationErrors, brand: undefined })
+                }
+              }}
+              error={validationErrors.brand}
             />
             <Input
               id="model"
@@ -97,7 +248,13 @@ export default function NewCarPage() {
               placeholder="e.g., ID.4"
               required
               value={formData.model}
-              onChange={(e) => setFormData({ ...formData, model: e.target.value })}
+              onChange={(e) => {
+                setFormData({ ...formData, model: e.target.value })
+                if (validationErrors.model) {
+                  setValidationErrors({ ...validationErrors, model: undefined })
+                }
+              }}
+              error={validationErrors.model}
             />
           </div>
 

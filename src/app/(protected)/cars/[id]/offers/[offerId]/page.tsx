@@ -124,38 +124,9 @@ export default async function OfferDetailPage({
               Edit
             </Button>
           </Link>
-          <DeleteOfferButton carId={carId} offerId={offerId} />
+          <DeleteOfferButton carId={carId} offerId={offerId} offerName={offer.name} />
         </div>
       </div>
-
-      {/* Offer Link Card */}
-      {offer.source_url && (
-        <Card className="bg-indigo-50 border-indigo-200">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm font-medium text-indigo-900">Offer Link</p>
-              <a
-                href={offer.source_url}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-indigo-600 hover:text-indigo-800 text-sm break-all"
-              >
-                {offer.source_url}
-              </a>
-            </div>
-            <a
-              href={offer.source_url}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="flex-shrink-0 ml-4"
-            >
-              <Button size="sm">
-                Open Link
-              </Button>
-            </a>
-          </div>
-        </Card>
-      )}
 
       {/* Cost Summary */}
       <Card>

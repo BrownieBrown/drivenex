@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" fill="none">
+  <!-- D letter shape -->
+  <path d="M6 4h10c6.627 0 12 5.373 12 12s-5.373 12-12 12H6V4z" fill="#4F46E5"/>
+  <path d="M10 8h6c4.418 0 8 3.582 8 8s-3.582 8-8 8h-6V8z" fill="white"/>
+
+  <!-- Wheel element on the D curve -->
+  <circle cx="22" cy="22" r="5" fill="#4F46E5"/>
+  <circle cx="22" cy="22" r="2.5" fill="white"/>
+  <circle cx="22" cy="22" r="1" fill="#4F46E5"/>
+</svg>

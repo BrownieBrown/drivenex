@@ -4,6 +4,7 @@ import Link from 'next/link'
 import { Card, Button } from '@/components/ui'
 import DeleteCarButton from './DeleteCarButton'
 import OfferCard from './OfferCard'
+import { findPresetForCar } from '@/lib/ev-presets'
 import type { Car, Offer } from '@/types/database'
 
 const fuelTypeLabels: Record<string, string> = {
@@ -42,6 +43,21 @@ export default async function CarDetailPage({
   const offers = (offersData || []) as unknown as Offer[]
 
   const isBEV = car.fuel_type === 'bev'
+  const preset = findPresetForCar(car)
+
+  // Generate star rating display
+  const renderStars = (rating: number) => {
+    const fullStars = Math.floor(rating / 2)
+    const hasHalfStar = rating % 2 >= 1
+    const emptyStars = 5 - fullStars - (hasHalfStar ? 1 : 0)
+    return (
+      <span className="text-yellow-500">
+        {'★'.repeat(fullStars)}
+        {hasHalfStar && '½'}
+        {'☆'.repeat(emptyStars)}
+      </span>
+    )
+  }
 
   return (
     <div className="space-y-6">
@@ -71,7 +87,7 @@ export default async function CarDetailPage({
               Edit
             </Button>
           </Link>
-          <DeleteCarButton carId={id} />
+          <DeleteCarButton carId={id} carName={`${car.brand} ${car.model}`} />
         </div>
       </div>
 
@@ -111,6 +127,68 @@ export default async function CarDetailPage({
           )}
         </div>
       </Card>
+
+      {/* DRIVENEX Rating - Only shown for BEVs with a matching preset */}
+      {isBEV && preset && (
+        <Card>
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-lg font-semibold text-gray-900">DRIVENEX Rating</h2>
+            <div className="flex items-center gap-2">
+              {renderStars(preset.rating)}
+              <span className="text-lg font-bold text-gray-900">{preset.rating.toFixed(1)}/10</span>
+            </div>
+          </div>
+
+          <div className="grid md:grid-cols-2 gap-6">
+            {/* Pros */}
+            <div>
+              <h3 className="text-sm font-medium text-gray-500 mb-2">Pros</h3>
+              <ul className="space-y-2">
+                {preset.pros.map((pro, index) => (
+                  <li key={index} className="flex items-start gap-2">
+                    <svg className="w-5 h-5 text-green-500 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                    </svg>
+                    <span className="text-gray-700">{pro}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+
+            {/* Cons */}
+            <div>
+              <h3 className="text-sm font-medium text-gray-500 mb-2">Cons</h3>
+              <ul className="space-y-2">
+                {preset.cons.map((con, index) => (
+                  <li key={index} className="flex items-start gap-2">
+                    <svg className="w-5 h-5 text-red-500 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                    <span className="text-gray-700">{con}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          </div>
+
+          {/* Review link */}
+          {preset.reviewUrl && (
+            <div className="mt-4 pt-4 border-t border-gray-100">
+              <a
+                href={preset.reviewUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center text-indigo-600 hover:text-indigo-800 font-medium"
+              >
+                Read full ADAC review
+                <svg className="w-4 h-4 ml-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                </svg>
+              </a>
+            </div>
+          )}
+        </Card>
+      )}
 
       {/* Offers */}
       <div className="flex items-center justify-between">
