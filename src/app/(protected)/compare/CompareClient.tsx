@@ -1,13 +1,16 @@
 'use client'
 
-import { useState, useMemo } from 'react'
-import { Card } from '@/components/ui'
+import { useState, useMemo, useCallback } from 'react'
+import { Card, Button, Input, Modal, useToast } from '@/components/ui'
+import { createClient } from '@/lib/supabase/client'
 import { calculateTCO, formatCurrency } from '@/lib/calculations'
+import { exportComparisonToPDF } from '@/lib/pdf-export'
 import {
   CumulativeCostChart,
   MonthlyCostBreakdownChart,
 } from '@/components/charts/CostChart'
-import type { Car, Offer, RunningCosts } from '@/types/database'
+import type { Car, Offer, RunningCosts, ComparisonInsert } from '@/types/database'
+import { getUserFriendlyError } from '@/lib/errors'
 import Link from 'next/link'
 
 type CarWithOffers = Car & {
@@ -26,9 +29,14 @@ const offerTypeLabels: Record<string, string> = {
 }
 
 export default function CompareClient({ cars, preselectedIds }: CompareClientProps) {
+  const supabase = createClient()
+  const toast = useToast()
   const [selectedOfferIds, setSelectedOfferIds] = useState<string[]>(preselectedIds)
   const [years, setYears] = useState(3)
   const [compareByContract, setCompareByContract] = useState(false)
+  const [showSaveModal, setShowSaveModal] = useState(false)
+  const [comparisonName, setComparisonName] = useState('')
+  const [saving, setSaving] = useState(false)
 
   const allOffers = useMemo(() => {
     return cars.flatMap((car) =>
@@ -68,12 +76,41 @@ export default function CompareClient({ cars, preselectedIds }: CompareClientPro
     )
   }, [selectedOffers, years, compareByContract])
 
-  const toggleOffer = (offerId: string) => {
+  const toggleOffer = useCallback((offerId: string) => {
     setSelectedOfferIds((prev) =>
       prev.includes(offerId)
         ? prev.filter((id) => id !== offerId)
         : [...prev, offerId]
     )
+  }, [])
+
+  const handleSaveComparison = async () => {
+    if (!comparisonName.trim() || selectedOfferIds.length === 0) return
+    setSaving(true)
+
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) {
+      toast.error('You must be logged in')
+      setSaving(false)
+      return
+    }
+
+    const comparisonData: ComparisonInsert = {
+      user_id: user.id,
+      name: comparisonName.trim(),
+      offer_ids: selectedOfferIds,
+    }
+
+    const { error } = await supabase.from('comparisons').insert(comparisonData)
+
+    if (error) {
+      toast.error(getUserFriendlyError(error))
+    } else {
+      toast.success('Comparison saved!')
+      setShowSaveModal(false)
+      setComparisonName('')
+    }
+    setSaving(false)
   }
 
   return (
@@ -136,6 +173,49 @@ export default function CompareClient({ cars, preselectedIds }: CompareClientPro
           ))}
         </div>
       </Card>
+
+      {/* Save and Export Buttons */}
+      {selectedOfferIds.length > 0 && (
+        <div className="flex justify-end gap-2">
+          <Button
+            onClick={() => exportComparisonToPDF(comparisonData, years, compareByContract)}
+            variant="secondary"
+            disabled={comparisonData.length === 0}
+          >
+            <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+            </svg>
+            Export PDF
+          </Button>
+          <Button onClick={() => setShowSaveModal(true)} variant="secondary">
+            <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4" />
+            </svg>
+            Save Comparison
+          </Button>
+        </div>
+      )}
+
+      {/* Save Comparison Modal */}
+      <Modal
+        isOpen={showSaveModal}
+        onClose={() => setShowSaveModal(false)}
+        onConfirm={handleSaveComparison}
+        title="Save Comparison"
+        message=""
+        loading={saving}
+      >
+        <div className="mt-4">
+          <Input
+            id="comparison-name"
+            label="Comparison Name"
+            placeholder="e.g., BYD vs Tesla comparison"
+            value={comparisonName}
+            onChange={(e) => setComparisonName(e.target.value)}
+            hint={`Saving ${selectedOfferIds.length} offer${selectedOfferIds.length === 1 ? '' : 's'}`}
+          />
+        </div>
+      </Modal>
 
       {/* Duration Selector */}
       {selectedOfferIds.length > 0 && (

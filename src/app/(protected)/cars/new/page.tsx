@@ -5,7 +5,9 @@ import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { Card, Button, Input, Select, useToast } from '@/components/ui'
 import { EV_PRESETS, searchPresets, type EVPreset } from '@/lib/ev-presets'
-import type { FuelType } from '@/types/database'
+import type { FuelType, CarInsert } from '@/types/database'
+import { parseIntegerOrNull, parseNumberOrNull } from '@/lib/supabase/helpers'
+import { getUserFriendlyError } from '@/lib/errors'
 
 const fuelTypeOptions = [
   { value: 'bev', label: 'Electric (BEV)' },
@@ -111,20 +113,22 @@ export default function NewCarPage() {
       return
     }
 
-    const { error: insertError } = await supabase.from('cars').insert({
+    const carData: CarInsert = {
       user_id: user.id,
       brand: formData.brand.trim(),
       model: formData.model.trim(),
       variant: formData.variant.trim() || null,
       fuel_type: formData.fuel_type,
-      power_kw: formData.power_kw ? parseInt(formData.power_kw) : null,
-      co2_emissions: formData.co2_emissions ? parseInt(formData.co2_emissions) : null,
-      battery_kwh: formData.battery_kwh ? parseFloat(formData.battery_kwh) : null,
-      consumption: formData.consumption ? parseFloat(formData.consumption) : null,
-    } as never)
+      power_kw: parseIntegerOrNull(formData.power_kw),
+      co2_emissions: parseIntegerOrNull(formData.co2_emissions),
+      battery_kwh: parseNumberOrNull(formData.battery_kwh),
+      consumption: parseNumberOrNull(formData.consumption),
+    }
+
+    const { error: insertError } = await supabase.from('cars').insert(carData)
 
     if (insertError) {
-      setError(insertError.message)
+      setError(getUserFriendlyError(insertError))
       setLoading(false)
     } else {
       toast.success('Car added successfully')

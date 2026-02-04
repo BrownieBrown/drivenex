@@ -65,3 +65,6 @@ export const DEFAULT_TIRE_COSTS = 300
 
 // Default km/year
 export const DEFAULT_KM_PER_YEAR = 15000
+
+// Default insurance (EUR/year at SF10)
+export const DEFAULT_INSURANCE_YEARLY = 1200

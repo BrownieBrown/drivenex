@@ -10,7 +10,7 @@ import {
   getDefaultMaintenance,
   formatCurrency,
 } from '@/lib/calculations'
-import { DEFAULT_TIRE_COSTS } from '@/lib/constants'
+import { DEFAULT_TIRE_COSTS, DEFAULT_INSURANCE_YEARLY } from '@/lib/constants'
 
 const offerTypeLabels: Record<string, string> = {
   lease: 'Leasing',
@@ -36,14 +36,19 @@ export default async function OfferDetailPage({
     notFound()
   }
 
-  const offer = offerData as unknown as Offer
-  const car = carData as unknown as Car
-  const runningCosts = runningCostsData as unknown as RunningCosts | null
+  const offer = offerData as Offer
+  const car = carData as Car
+  const runningCosts = runningCostsData as RunningCosts | null
+
+  // Calculate other fees total
+  const otherFeesTotal = Object.values(offer.other_fees || {}).reduce((sum, fee) => sum + fee, 0)
+  const otherFeesEntries = Object.entries(offer.other_fees || {})
 
   const totalContractCost =
     (offer.monthly_payment * offer.duration_months) +
     offer.down_payment +
-    offer.transfer_fee
+    offer.transfer_fee +
+    otherFeesTotal
 
   // Calculate estimated running costs
   const yearlyFuelCost = calculateFuelCostYearly(car, offer.km_per_year, runningCosts)
@@ -55,12 +60,11 @@ export default async function OfferDetailPage({
     ? 0
     : (runningCosts?.tire_costs ?? DEFAULT_TIRE_COSTS)
 
-  // Insurance: use configured value, or estimate 1200€/year as default (SF10)
+  // Insurance: use configured value, or estimate default (SF10)
   // For new drivers (SF0), this could be 2000€+
-  const DEFAULT_INSURANCE = 1200
   const yearlyInsurance = offer.includes_insurance
     ? 0
-    : (runningCosts?.insurance_yearly ?? DEFAULT_INSURANCE)
+    : (runningCosts?.insurance_yearly ?? DEFAULT_INSURANCE_YEARLY)
 
   const yearlyRunningCosts = yearlyFuelCost + yearlyTax + yearlyMaintenance + yearlyTires + yearlyInsurance
   const monthlyRunningCosts = yearlyRunningCosts / 12
@@ -149,6 +153,19 @@ export default async function OfferDetailPage({
             <p className="text-xl font-semibold text-indigo-600">{totalContractCost.toFixed(2)} EUR</p>
           </div>
         </div>
+        {otherFeesEntries.length > 0 && (
+          <div className="mt-4 pt-4 border-t border-gray-200">
+            <p className="text-sm font-medium text-gray-700 mb-2">Other One-Time Fees</p>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+              {otherFeesEntries.map(([name, amount]) => (
+                <div key={name}>
+                  <p className="text-sm text-gray-500">{name}</p>
+                  <p className="font-medium text-gray-900">{amount.toFixed(2)} EUR</p>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
       </Card>
 
       {/* Contract Details */}

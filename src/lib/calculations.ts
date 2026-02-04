@@ -23,6 +23,7 @@ export interface YearlyCost {
   maintenance: number
   tires: number
   tuv: number
+  otherCosts: number
   total: number
   cumulative: number
 }
@@ -54,17 +55,46 @@ export function calculateKfzSteuer(car: Car): number {
   return Math.max(co2Tax, 16)
 }
 
+// Valid SF-Klasse levels (some gaps exist in the progression)
+const SF_KLASSE_LEVELS = [0, 0.5, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 25, 30, 35]
+
+/**
+ * Get the next SF-Klasse level after a claim-free year
+ */
+export function getNextSfKlasse(current: number): number {
+  const currentIndex = SF_KLASSE_LEVELS.indexOf(current)
+  if (currentIndex === -1) {
+    // If current level not found, find nearest lower level
+    const nearestLower = SF_KLASSE_LEVELS.filter(l => l <= current).pop() ?? 0
+    const nearestIndex = SF_KLASSE_LEVELS.indexOf(nearestLower)
+    return SF_KLASSE_LEVELS[Math.min(nearestIndex + 1, SF_KLASSE_LEVELS.length - 1)]
+  }
+  return SF_KLASSE_LEVELS[Math.min(currentIndex + 1, SF_KLASSE_LEVELS.length - 1)]
+}
+
+/**
+ * Calculate SF-Klasse after N claim-free years
+ */
+export function getSfKlasseAfterYears(startingSfKlasse: number, years: number): number {
+  let sfKlasse = startingSfKlasse
+  for (let i = 0; i < years; i++) {
+    sfKlasse = getNextSfKlasse(sfKlasse)
+  }
+  return sfKlasse
+}
+
 export function calculateInsuranceForYear(
   baseInsurance: number,
   startingSfKlasse: number,
   year: number
 ): number {
-  // Each claim-free year improves SF-Klasse by 1
-  const sfKlasse = Math.min(startingSfKlasse + year, 35)
-  const percentage = SF_KLASSE_PERCENTAGES[sfKlasse] || SF_KLASSE_PERCENTAGES[Math.min(sfKlasse, 35)]
+  // Use proper SF-Klasse progression with gaps
+  const sfKlasse = getSfKlasseAfterYears(startingSfKlasse, year)
+  const percentage = SF_KLASSE_PERCENTAGES[sfKlasse] ?? SF_KLASSE_PERCENTAGES[35]
 
-  // Base insurance is at SF5 (100%), adjust accordingly
-  const baseAtSf5 = baseInsurance / (SF_KLASSE_PERCENTAGES[startingSfKlasse] / 100)
+  // Base insurance is entered at the starting SF-Klasse, normalize to SF5 (100%) then apply new rate
+  const startingPercentage = SF_KLASSE_PERCENTAGES[startingSfKlasse] ?? SF_KLASSE_PERCENTAGES[0]
+  const baseAtSf5 = baseInsurance / (startingPercentage / 100)
   return baseAtSf5 * (percentage / 100)
 }
 
@@ -102,6 +132,28 @@ export function getDefaultMaintenance(fuelType: string): number {
   }
 }
 
+/**
+ * Calculate TÜV (vehicle inspection) cost for a given year
+ * New cars: first inspection after 3 years, then every 2 years
+ */
+export function calculateTuvForYear(year: number, isNewCar: boolean = true): number {
+  if (isNewCar) {
+    // First TÜV after 3 years, then every 2 years (years 3, 5, 7, 9, ...)
+    if (year === TUV_FIRST_INSPECTION_YEAR) {
+      return TUV_COST
+    }
+    if (year > TUV_FIRST_INSPECTION_YEAR && (year - TUV_FIRST_INSPECTION_YEAR) % 2 === 0) {
+      return TUV_COST
+    }
+  } else {
+    // Used cars: every 2 years (years 2, 4, 6, ...)
+    if (year % 2 === 0) {
+      return TUV_COST
+    }
+  }
+  return 0
+}
+
 export function calculateTCO(
   car: Car,
   offer: Offer,
@@ -112,10 +164,17 @@ export function calculateTCO(
   const effectiveYears = Math.min(years, durationYears)
 
   const yearlyCosts: YearlyCost[] = []
-  let cumulative = offer.down_payment + offer.transfer_fee
 
-  // Upfront costs
-  const upfrontCosts = offer.down_payment + offer.transfer_fee
+  // Calculate one-time fees from other_fees
+  const otherFeesTotal = Object.values(offer.other_fees || {}).reduce((sum, fee) => sum + fee, 0)
+
+  // Calculate yearly other_costs from running costs
+  const otherCostsYearly = Object.values(runningCosts?.other_costs || {}).reduce((sum, cost) => sum + cost, 0)
+
+  let cumulative = offer.down_payment + offer.transfer_fee + otherFeesTotal
+
+  // Upfront costs (including other_fees as one-time fees)
+  const upfrontCosts = offer.down_payment + offer.transfer_fee + otherFeesTotal
 
   for (let year = 1; year <= effectiveYears; year++) {
     const monthlyPayment = offer.monthly_payment * 12
@@ -138,16 +197,14 @@ export function calculateTCO(
       ? 0
       : runningCosts?.maintenance_yearly || getDefaultMaintenance(car.fuel_type)
 
-    // Tires
-    const tires = runningCosts?.tire_costs || DEFAULT_TIRE_COSTS
+    // Tires (skip if included in offer)
+    const tires = offer.includes_tires ? 0 : (runningCosts?.tire_costs ?? DEFAULT_TIRE_COSTS)
 
-    // TÜV (every 2 years, first after 3 years for new cars)
-    // Assuming new car for simplicity
-    const tuv = year >= TUV_FIRST_INSPECTION_YEAR && (year - TUV_FIRST_INSPECTION_YEAR) % 2 === 0
-      ? TUV_COST
-      : 0
+    // TÜV/HU (vehicle inspection)
+    // New cars: first after 3 years, then every 2 years
+    const tuv = calculateTuvForYear(year)
 
-    const total = monthlyPayment + fuelCost + insurance + tax + maintenance + tires + tuv
+    const total = monthlyPayment + fuelCost + insurance + tax + maintenance + tires + tuv + otherCostsYearly
     cumulative += total
 
     yearlyCosts.push({
@@ -159,6 +216,7 @@ export function calculateTCO(
       maintenance,
       tires,
       tuv,
+      otherCosts: otherCostsYearly,
       total,
       cumulative,
     })
@@ -166,7 +224,7 @@ export function calculateTCO(
 
   const totalCost = cumulative
   const contractCosts = offer.monthly_payment * offer.duration_months
-  const runningCostsTotal = yearlyCosts.reduce((sum, y) => sum + y.fuelCost + y.insurance + y.tax + y.maintenance + y.tires + y.tuv, 0)
+  const runningCostsTotal = yearlyCosts.reduce((sum, y) => sum + y.fuelCost + y.insurance + y.tax + y.maintenance + y.tires + y.tuv + y.otherCosts, 0)
 
   return {
     yearlyCosts,

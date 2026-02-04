@@ -4,7 +4,9 @@ import { useState, useEffect } from 'react'
 import { useRouter, useParams } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { Card, Button, Input, Select } from '@/components/ui'
-import type { FuelType, Car } from '@/types/database'
+import type { FuelType, Car, CarUpdate } from '@/types/database'
+import { parseIntegerOrNull, parseNumberOrNull } from '@/lib/supabase/helpers'
+import { getUserFriendlyError } from '@/lib/errors'
 
 const fuelTypeOptions = [
   { value: 'bev', label: 'Electric (BEV)' },
@@ -63,22 +65,24 @@ export default function EditCarPage() {
     setError(null)
     setLoading(true)
 
+    const updateData: CarUpdate = {
+      brand: formData.brand,
+      model: formData.model,
+      variant: formData.variant || null,
+      fuel_type: formData.fuel_type,
+      power_kw: parseIntegerOrNull(formData.power_kw),
+      co2_emissions: parseIntegerOrNull(formData.co2_emissions),
+      battery_kwh: parseNumberOrNull(formData.battery_kwh),
+      consumption: parseNumberOrNull(formData.consumption),
+    }
+
     const { error: updateError } = await supabase
       .from('cars')
-      .update({
-        brand: formData.brand,
-        model: formData.model,
-        variant: formData.variant || null,
-        fuel_type: formData.fuel_type,
-        power_kw: formData.power_kw ? parseInt(formData.power_kw) : null,
-        co2_emissions: formData.co2_emissions ? parseInt(formData.co2_emissions) : null,
-        battery_kwh: formData.battery_kwh ? parseFloat(formData.battery_kwh) : null,
-        consumption: formData.consumption ? parseFloat(formData.consumption) : null,
-      } as never)
+      .update(updateData)
       .eq('id', id)
 
     if (updateError) {
-      setError(updateError.message)
+      setError(getUserFriendlyError(updateError))
       setLoading(false)
     } else {
       router.push(`/cars/${id}`)
