@@ -3,28 +3,11 @@
 import { useState, useEffect } from 'react'
 import { useRouter, useParams } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
-import { Card, Button, Input } from '@/components/ui'
-import type { Car, Offer, RunningCosts } from '@/types/database'
-
-const SF_KLASSE_DISCOUNTS: Record<number, number> = {
-  0: 230,
-  0.5: 200,
-  1: 140,
-  2: 130,
-  3: 120,
-  4: 110,
-  5: 100,
-  6: 95,
-  7: 85,
-  8: 80,
-  9: 75,
-  10: 70,
-  15: 55,
-  20: 45,
-  25: 40,
-  30: 35,
-  35: 30,
-}
+import { Card, Button, Input, KeyValueInput } from '@/components/ui'
+import type { Car, Offer, RunningCosts, RunningCostsInsert, RunningCostsUpdate } from '@/types/database'
+import { SF_KLASSE_PERCENTAGES } from '@/lib/constants'
+import { parseNumber, parseInteger } from '@/lib/supabase/helpers'
+import { getUserFriendlyError } from '@/lib/errors'
 
 export default function RunningCostsPage() {
   const { id: carId, offerId } = useParams<{ id: string; offerId: string }>()
@@ -43,6 +26,7 @@ export default function RunningCostsPage() {
     electricity_price: '',
     maintenance_yearly: '',
     tire_costs: '',
+    other_costs: {} as Record<string, number>,
   })
 
   useEffect(() => {
@@ -68,6 +52,7 @@ export default function RunningCostsPage() {
           electricity_price: typedCosts.electricity_price?.toString() || '',
           maintenance_yearly: typedCosts.maintenance_yearly?.toString() || '',
           tire_costs: typedCosts.tire_costs?.toString() || '',
+          other_costs: typedCosts.other_costs || {},
         })
       } else if (typedCar) {
         // Set defaults based on car type
@@ -79,6 +64,7 @@ export default function RunningCostsPage() {
           electricity_price: isBEV ? '0.30' : '',
           maintenance_yearly: isBEV ? '200' : '400',
           tire_costs: '300',
+          other_costs: {},
         })
       }
     }
@@ -90,28 +76,30 @@ export default function RunningCostsPage() {
     setError(null)
     setLoading(true)
 
-    const data = {
-      offer_id: offerId,
-      insurance_yearly: parseFloat(formData.insurance_yearly),
-      sf_klasse: parseInt(formData.sf_klasse),
-      fuel_price: formData.fuel_price ? parseFloat(formData.fuel_price) : null,
-      electricity_price: formData.electricity_price ? parseFloat(formData.electricity_price) : null,
-      maintenance_yearly: parseFloat(formData.maintenance_yearly) || 0,
-      tire_costs: parseFloat(formData.tire_costs) || 0,
+    const baseData = {
+      insurance_yearly: parseNumber(formData.insurance_yearly),
+      sf_klasse: parseInteger(formData.sf_klasse),
+      fuel_price: formData.fuel_price ? parseNumber(formData.fuel_price) : null,
+      electricity_price: formData.electricity_price ? parseNumber(formData.electricity_price) : null,
+      maintenance_yearly: parseNumber(formData.maintenance_yearly),
+      tire_costs: parseNumber(formData.tire_costs),
+      other_costs: formData.other_costs,
     }
 
     let result
     if (existingCosts) {
+      const updateData: RunningCostsUpdate = baseData
       result = await supabase
         .from('running_costs')
-        .update(data as never)
+        .update(updateData)
         .eq('id', existingCosts.id)
     } else {
-      result = await supabase.from('running_costs').insert(data as never)
+      const insertData: RunningCostsInsert = { ...baseData, offer_id: offerId }
+      result = await supabase.from('running_costs').insert(insertData)
     }
 
     if (result.error) {
-      setError(result.error.message)
+      setError(getUserFriendlyError(result.error))
       setLoading(false)
     } else {
       router.push(`/cars/${carId}/offers/${offerId}`)
@@ -129,7 +117,7 @@ export default function RunningCostsPage() {
 
   const isBEV = car.fuel_type === 'bev'
   const sfKlasse = parseInt(formData.sf_klasse)
-  const sfDiscount = SF_KLASSE_DISCOUNTS[sfKlasse] || SF_KLASSE_DISCOUNTS[Math.min(sfKlasse, 35)]
+  const sfDiscount = SF_KLASSE_PERCENTAGES[sfKlasse] ?? SF_KLASSE_PERCENTAGES[35]
 
   return (
     <div className="max-w-2xl mx-auto">
@@ -284,6 +272,19 @@ export default function RunningCostsPage() {
               value={formData.tire_costs}
               onChange={(e) => setFormData({ ...formData, tire_costs: e.target.value })}
               hint="Include winter tire storage, replacement reserves"
+            />
+          </div>
+
+          {/* Other Yearly Costs */}
+          <div className="space-y-4">
+            <h3 className="font-medium text-gray-900">Other Yearly Costs</h3>
+
+            <KeyValueInput
+              label="Additional Recurring Costs"
+              hint="Add parking, washing, accessories, etc."
+              value={formData.other_costs}
+              onChange={(costs) => setFormData({ ...formData, other_costs: costs })}
+              unitLabel="EUR/year"
             />
           </div>
 

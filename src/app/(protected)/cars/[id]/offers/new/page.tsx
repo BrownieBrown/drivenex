@@ -3,8 +3,10 @@
 import { useState } from 'react'
 import { useRouter, useParams } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
-import { Card, Button, Input, Select, useToast } from '@/components/ui'
-import type { OfferType } from '@/types/database'
+import { Card, Button, Input, Select, useToast, KeyValueInput } from '@/components/ui'
+import type { OfferType, OfferInsert } from '@/types/database'
+import { parseNumber, parseInteger, parseNumberOrNull } from '@/lib/supabase/helpers'
+import { getUserFriendlyError } from '@/lib/errors'
 
 const offerTypeOptions = [
   { value: 'lease', label: 'Leasing' },
@@ -27,6 +29,7 @@ interface FormData {
   includes_tax: boolean
   includes_tires: boolean
   transfer_fee: string
+  other_fees: Record<string, number>
   residual_value: string
   financing_rate: string
   notes: string
@@ -64,6 +67,7 @@ export default function NewOfferPage() {
     includes_tax: false,
     includes_tires: false,
     transfer_fee: '0',
+    other_fees: {},
     residual_value: '',
     financing_rate: '',
     notes: '',
@@ -123,30 +127,33 @@ export default function NewOfferPage() {
       return
     }
 
-    const { error: insertError } = await supabase.from('offers').insert({
+    const offerData: OfferInsert = {
       car_id: carId,
       user_id: user.id,
       type: formData.type,
       name: formData.name.trim(),
       source_url: formData.source_url.trim() || null,
       source_name: formData.source_name.trim() || null,
-      monthly_payment: parseFloat(formData.monthly_payment),
-      down_payment: parseFloat(formData.down_payment) || 0,
-      duration_months: parseInt(formData.duration_months),
-      km_per_year: parseInt(formData.km_per_year),
-      excess_km_cost: formData.excess_km_cost ? parseFloat(formData.excess_km_cost) : null,
+      monthly_payment: parseNumber(formData.monthly_payment),
+      down_payment: parseNumber(formData.down_payment),
+      duration_months: parseInteger(formData.duration_months),
+      km_per_year: parseInteger(formData.km_per_year),
+      excess_km_cost: parseNumberOrNull(formData.excess_km_cost),
       includes_insurance: formData.includes_insurance,
       includes_maintenance: formData.includes_maintenance,
       includes_tax: formData.includes_tax,
       includes_tires: formData.includes_tires,
-      transfer_fee: parseFloat(formData.transfer_fee) || 0,
-      residual_value: formData.residual_value ? parseFloat(formData.residual_value) : null,
-      financing_rate: formData.financing_rate ? parseFloat(formData.financing_rate) : null,
+      transfer_fee: parseNumber(formData.transfer_fee),
+      other_fees: formData.other_fees,
+      residual_value: parseNumberOrNull(formData.residual_value),
+      financing_rate: parseNumberOrNull(formData.financing_rate),
       notes: formData.notes.trim() || null,
-    } as never)
+    }
+
+    const { error: insertError } = await supabase.from('offers').insert(offerData)
 
     if (insertError) {
-      setError(insertError.message)
+      setError(getUserFriendlyError(insertError))
       setLoading(false)
     } else {
       toast.success('Offer added successfully')
@@ -377,6 +384,13 @@ export default function NewOfferPage() {
                   hint="If this is a residual value lease"
                 />
               )}
+
+              <KeyValueInput
+                label="Other One-Time Fees"
+                hint="Add registration fees, processing fees, etc."
+                value={formData.other_fees}
+                onChange={(fees) => setFormData({ ...formData, other_fees: fees })}
+              />
             </div>
           )}
 

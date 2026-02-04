@@ -3,8 +3,10 @@
 import { useState, useEffect } from 'react'
 import { useRouter, useParams } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
-import { Card, Button, Input, Select } from '@/components/ui'
-import type { OfferType, Offer } from '@/types/database'
+import { Card, Button, Input, Select, KeyValueInput } from '@/components/ui'
+import type { OfferType, Offer, OfferUpdate } from '@/types/database'
+import { parseNumber, parseInteger, parseNumberOrNull } from '@/lib/supabase/helpers'
+import { getUserFriendlyError } from '@/lib/errors'
 
 const offerTypeOptions = [
   { value: 'lease', label: 'Leasing' },
@@ -27,6 +29,7 @@ interface FormData {
   includes_tax: boolean
   includes_tires: boolean
   transfer_fee: string
+  other_fees: Record<string, number>
   residual_value: string
   financing_rate: string
   notes: string
@@ -56,6 +59,7 @@ export default function EditOfferPage() {
     includes_tax: false,
     includes_tires: false,
     transfer_fee: '0',
+    other_fees: {},
     residual_value: '',
     financing_rate: '',
     notes: '',
@@ -69,13 +73,13 @@ export default function EditOfferPage() {
         .eq('id', offerId)
         .single()
 
-      if (error) {
+      if (error || !data) {
         setError('Failed to load offer')
         setInitialLoading(false)
         return
       }
 
-      const offer = data as unknown as Offer
+      const offer = data as Offer
       setFormData({
         type: offer.type,
         name: offer.name,
@@ -91,6 +95,7 @@ export default function EditOfferPage() {
         includes_tax: offer.includes_tax,
         includes_tires: offer.includes_tires || false,
         transfer_fee: offer.transfer_fee.toString(),
+        other_fees: offer.other_fees || {},
         residual_value: offer.residual_value?.toString() || '',
         financing_rate: offer.financing_rate?.toString() || '',
         notes: offer.notes || '',
@@ -106,31 +111,34 @@ export default function EditOfferPage() {
     setError(null)
     setLoading(true)
 
+    const offerData: OfferUpdate = {
+      type: formData.type,
+      name: formData.name,
+      source_url: formData.source_url || null,
+      source_name: formData.source_name || null,
+      monthly_payment: parseNumber(formData.monthly_payment),
+      down_payment: parseNumber(formData.down_payment),
+      duration_months: parseInteger(formData.duration_months),
+      km_per_year: parseInteger(formData.km_per_year),
+      excess_km_cost: parseNumberOrNull(formData.excess_km_cost),
+      includes_insurance: formData.includes_insurance,
+      includes_maintenance: formData.includes_maintenance,
+      includes_tax: formData.includes_tax,
+      includes_tires: formData.includes_tires,
+      transfer_fee: parseNumber(formData.transfer_fee),
+      other_fees: formData.other_fees,
+      residual_value: parseNumberOrNull(formData.residual_value),
+      financing_rate: parseNumberOrNull(formData.financing_rate),
+      notes: formData.notes || null,
+    }
+
     const { error: updateError } = await supabase
       .from('offers')
-      .update({
-        type: formData.type,
-        name: formData.name,
-        source_url: formData.source_url || null,
-        source_name: formData.source_name || null,
-        monthly_payment: parseFloat(formData.monthly_payment),
-        down_payment: parseFloat(formData.down_payment) || 0,
-        duration_months: parseInt(formData.duration_months),
-        km_per_year: parseInt(formData.km_per_year),
-        excess_km_cost: formData.excess_km_cost ? parseFloat(formData.excess_km_cost) : null,
-        includes_insurance: formData.includes_insurance,
-        includes_maintenance: formData.includes_maintenance,
-        includes_tax: formData.includes_tax,
-        includes_tires: formData.includes_tires,
-        transfer_fee: parseFloat(formData.transfer_fee) || 0,
-        residual_value: formData.residual_value ? parseFloat(formData.residual_value) : null,
-        financing_rate: formData.financing_rate ? parseFloat(formData.financing_rate) : null,
-        notes: formData.notes || null,
-      } as never)
+      .update(offerData)
       .eq('id', offerId)
 
     if (updateError) {
-      setError(updateError.message)
+      setError(getUserFriendlyError(updateError))
       setLoading(false)
     } else {
       router.push(`/cars/${carId}/offers/${offerId}`)
@@ -348,6 +356,13 @@ export default function EditOfferPage() {
                   hint="If this is a residual value lease"
                 />
               )}
+
+              <KeyValueInput
+                label="Other One-Time Fees"
+                hint="Add registration fees, processing fees, etc."
+                value={formData.other_fees}
+                onChange={(fees) => setFormData({ ...formData, other_fees: fees })}
+              />
             </div>
           )}
 

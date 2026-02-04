@@ -11,7 +11,9 @@ import {
   DEFAULT_DIESEL_PRICE,
   DEFAULT_KM_PER_YEAR,
 } from '@/lib/constants'
-import type { UserSettings } from '@/types/database'
+import type { UserSettings, UserSettingsInsert, UserSettingsUpdate } from '@/types/database'
+import { parseNumber, parseInteger } from '@/lib/supabase/helpers'
+import { getUserFriendlyError } from '@/lib/errors'
 
 export default function SettingsPage() {
   const router = useRouter()
@@ -43,7 +45,7 @@ export default function SettingsPage() {
         .single()
 
       if (data) {
-        const settingsData = data as unknown as UserSettings
+        const settingsData = data as UserSettings
         setSettings(settingsData)
         setFormData({
           electricity_price_home: settingsData.electricity_price_home.toString(),
@@ -71,27 +73,28 @@ export default function SettingsPage() {
       return
     }
 
-    const data = {
-      user_id: user.id,
-      electricity_price_home: parseFloat(formData.electricity_price_home),
-      electricity_price_public: parseFloat(formData.electricity_price_public),
-      petrol_price: parseFloat(formData.petrol_price),
-      diesel_price: parseFloat(formData.diesel_price),
-      default_km_per_year: parseInt(formData.default_km_per_year),
+    const baseData = {
+      electricity_price_home: parseNumber(formData.electricity_price_home, DEFAULT_ELECTRICITY_PRICE_HOME),
+      electricity_price_public: parseNumber(formData.electricity_price_public, DEFAULT_ELECTRICITY_PRICE_PUBLIC),
+      petrol_price: parseNumber(formData.petrol_price, DEFAULT_PETROL_PRICE),
+      diesel_price: parseNumber(formData.diesel_price, DEFAULT_DIESEL_PRICE),
+      default_km_per_year: parseInteger(formData.default_km_per_year, DEFAULT_KM_PER_YEAR),
     }
 
     let result
     if (settings) {
+      const updateData: UserSettingsUpdate = baseData
       result = await supabase
         .from('user_settings')
-        .update(data as never)
+        .update(updateData)
         .eq('id', settings.id)
     } else {
-      result = await supabase.from('user_settings').insert(data as never)
+      const insertData: UserSettingsInsert = { ...baseData, user_id: user.id }
+      result = await supabase.from('user_settings').insert(insertData)
     }
 
     if (result.error) {
-      setError(result.error.message)
+      setError(getUserFriendlyError(result.error))
     } else {
       setSuccess(true)
       router.refresh()

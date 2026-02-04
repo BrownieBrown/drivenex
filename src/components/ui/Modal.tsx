@@ -8,11 +8,12 @@ interface ModalProps {
   onClose: () => void
   onConfirm: () => void
   title: string
-  message: string
+  message?: string
   confirmLabel?: string
   cancelLabel?: string
   variant?: 'danger' | 'default'
   loading?: boolean
+  children?: React.ReactNode
 }
 
 export default function Modal({
@@ -25,6 +26,7 @@ export default function Modal({
   cancelLabel = 'Cancel',
   variant = 'default',
   loading = false,
+  children,
 }: ModalProps) {
   const handleKeyDown = useCallback(
     (e: KeyboardEvent) => {
@@ -91,7 +93,11 @@ export default function Modal({
             {title}
           </h3>
 
-          <p className="mt-2 text-sm text-gray-500 text-center">{message}</p>
+          {message && (
+            <p className="mt-2 text-sm text-gray-500 text-center">{message}</p>
+          )}
+
+          {children}
 
           <div className="mt-6 flex gap-3 justify-center">
             <Button

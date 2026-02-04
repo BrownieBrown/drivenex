@@ -1,5 +1,6 @@
 'use client'
 
+import { useState } from 'react'
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
@@ -8,6 +9,7 @@ const navItems = [
   { href: '/dashboard', label: 'Dashboard', icon: HomeIcon },
   { href: '/cars', label: 'Cars', icon: CarIcon },
   { href: '/compare', label: 'Compare', icon: CompareIcon },
+  { href: '/compare/saved', label: 'Saved', icon: SavedIcon },
   { href: '/settings', label: 'Settings', icon: SettingsIcon },
 ]
 
@@ -45,10 +47,35 @@ function SettingsIcon() {
   )
 }
 
+function SavedIcon() {
+  return (
+    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z" />
+    </svg>
+  )
+}
+
+function MenuIcon() {
+  return (
+    <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
+    </svg>
+  )
+}
+
+function CloseIcon() {
+  return (
+    <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+    </svg>
+  )
+}
+
 export default function Navigation() {
   const pathname = usePathname()
   const router = useRouter()
   const supabase = createClient()
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
 
   const handleLogout = async () => {
     await supabase.auth.signOut()
@@ -56,72 +83,147 @@ export default function Navigation() {
     router.refresh()
   }
 
+  // Items to show in bottom nav (limited space)
+  const mobileBottomItems = navItems.filter(item =>
+    ['/dashboard', '/cars', '/compare', '/settings'].includes(item.href)
+  )
+
   return (
-    <nav className="bg-white border-b border-gray-200">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="flex justify-between h-16">
-          <div className="flex">
-            <div className="flex-shrink-0 flex items-center">
-              <Link href="/dashboard" className="text-xl font-bold text-indigo-600">
-                DRIVENEX
-              </Link>
+    <>
+      <nav className="bg-white border-b border-gray-200">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="flex justify-between h-16">
+            <div className="flex">
+              <div className="flex-shrink-0 flex items-center">
+                <Link href="/dashboard" className="text-xl font-bold text-indigo-600">
+                  DRIVENEX
+                </Link>
+              </div>
+              <div className="hidden sm:ml-8 sm:flex sm:space-x-4">
+                {navItems.map((item) => {
+                  const isActive = pathname === item.href || (item.href !== '/compare' && pathname.startsWith(item.href + '/'))
+                  return (
+                    <Link
+                      key={item.href}
+                      href={item.href}
+                      className={`inline-flex items-center px-3 py-2 text-sm font-medium rounded-lg transition-colors ${
+                        isActive
+                          ? 'bg-indigo-50 text-indigo-700'
+                          : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
+                      }`}
+                    >
+                      <item.icon />
+                      <span className="ml-2">{item.label}</span>
+                    </Link>
+                  )
+                })}
+              </div>
             </div>
-            <div className="hidden sm:ml-8 sm:flex sm:space-x-4">
+            <div className="flex items-center gap-2">
+              {/* Hamburger button for mobile */}
+              <button
+                onClick={() => setMobileMenuOpen(true)}
+                className="sm:hidden inline-flex items-center justify-center p-2 rounded-lg text-gray-600 hover:text-gray-900 hover:bg-gray-50"
+              >
+                <MenuIcon />
+              </button>
+              {/* Sign out button - desktop */}
+              <button
+                onClick={handleLogout}
+                className="hidden sm:inline-flex items-center px-3 py-2 text-sm font-medium text-gray-600 hover:text-gray-900 hover:bg-gray-50 rounded-lg transition-colors"
+              >
+                <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+                </svg>
+                Sign out
+              </button>
+            </div>
+          </div>
+        </div>
+
+        {/* Mobile bottom navigation */}
+        <div className="sm:hidden border-t border-gray-200">
+          <div className="flex justify-around py-2">
+            {mobileBottomItems.map((item) => {
+              const isActive = pathname === item.href || (item.href !== '/compare' && pathname.startsWith(item.href + '/'))
+              return (
+                <Link
+                  key={item.href}
+                  href={item.href}
+                  className={`flex flex-col items-center px-3 py-2 text-xs font-medium rounded-lg ${
+                    isActive
+                      ? 'text-indigo-700'
+                      : 'text-gray-600'
+                  }`}
+                >
+                  <item.icon />
+                  <span className="mt-1">{item.label}</span>
+                </Link>
+              )
+            })}
+          </div>
+        </div>
+      </nav>
+
+      {/* Mobile slide-out menu */}
+      {mobileMenuOpen && (
+        <div className="fixed inset-0 z-50 sm:hidden">
+          {/* Backdrop */}
+          <div
+            className="fixed inset-0 bg-black/50"
+            onClick={() => setMobileMenuOpen(false)}
+          />
+
+          {/* Slide-out panel */}
+          <div className="fixed inset-y-0 right-0 w-64 bg-white shadow-xl">
+            <div className="flex items-center justify-between p-4 border-b border-gray-200">
+              <span className="text-lg font-semibold text-gray-900">Menu</span>
+              <button
+                onClick={() => setMobileMenuOpen(false)}
+                className="p-2 rounded-lg text-gray-600 hover:text-gray-900 hover:bg-gray-50"
+              >
+                <CloseIcon />
+              </button>
+            </div>
+
+            <div className="py-4">
               {navItems.map((item) => {
-                const isActive = pathname === item.href || pathname.startsWith(item.href + '/')
+                const isActive = pathname === item.href || (item.href !== '/compare' && pathname.startsWith(item.href + '/'))
                 return (
                   <Link
                     key={item.href}
                     href={item.href}
-                    className={`inline-flex items-center px-3 py-2 text-sm font-medium rounded-lg transition-colors ${
+                    onClick={() => setMobileMenuOpen(false)}
+                    className={`flex items-center px-4 py-3 text-sm font-medium ${
                       isActive
-                        ? 'bg-indigo-50 text-indigo-700'
-                        : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
+                        ? 'bg-indigo-50 text-indigo-700 border-r-2 border-indigo-700'
+                        : 'text-gray-600 hover:bg-gray-50'
                     }`}
                   >
                     <item.icon />
-                    <span className="ml-2">{item.label}</span>
+                    <span className="ml-3">{item.label}</span>
                   </Link>
                 )
               })}
+
+              <div className="border-t border-gray-200 mt-4 pt-4">
+                <button
+                  onClick={() => {
+                    setMobileMenuOpen(false)
+                    handleLogout()
+                  }}
+                  className="flex items-center w-full px-4 py-3 text-sm font-medium text-gray-600 hover:bg-gray-50"
+                >
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+                  </svg>
+                  <span className="ml-3">Sign out</span>
+                </button>
+              </div>
             </div>
           </div>
-          <div className="flex items-center">
-            <button
-              onClick={handleLogout}
-              className="inline-flex items-center px-3 py-2 text-sm font-medium text-gray-600 hover:text-gray-900 hover:bg-gray-50 rounded-lg transition-colors"
-            >
-              <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
-              </svg>
-              Sign out
-            </button>
-          </div>
         </div>
-      </div>
-
-      {/* Mobile navigation */}
-      <div className="sm:hidden border-t border-gray-200">
-        <div className="flex justify-around py-2">
-          {navItems.map((item) => {
-            const isActive = pathname === item.href || pathname.startsWith(item.href + '/')
-            return (
-              <Link
-                key={item.href}
-                href={item.href}
-                className={`flex flex-col items-center px-3 py-2 text-xs font-medium rounded-lg ${
-                  isActive
-                    ? 'text-indigo-700'
-                    : 'text-gray-600'
-                }`}
-              >
-                <item.icon />
-                <span className="mt-1">{item.label}</span>
-              </Link>
-            )
-          })}
-        </div>
-      </div>
-    </nav>
+      )}
+    </>
   )
 }

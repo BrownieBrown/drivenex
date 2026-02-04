@@ -32,7 +32,7 @@ export default async function CarDetailPage({
     notFound()
   }
 
-  const car = carData as unknown as Car
+  const car = carData as Car
 
   const { data: offersData } = await supabase
     .from('offers')
@@ -40,7 +40,7 @@ export default async function CarDetailPage({
     .eq('car_id', id)
     .order('created_at', { ascending: false })
 
-  const offers = (offersData || []) as unknown as Offer[]
+  const offers = (offersData ?? []) as Offer[]
 
   const isBEV = car.fuel_type === 'bev'
   const preset = findPresetForCar(car)

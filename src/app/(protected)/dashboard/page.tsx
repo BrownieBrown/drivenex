@@ -6,16 +6,18 @@ import type { Car } from '@/types/database'
 export default async function DashboardPage() {
   const supabase = await createClient()
 
-  const [{ data: carsData }, { data: offersData }] = await Promise.all([
+  const [{ data: carsData }, { data: offersData }, { count: comparisonCount }] = await Promise.all([
     supabase.from('cars').select('*').order('created_at', { ascending: false }),
     supabase.from('offers').select('*, cars(brand, model)').order('created_at', { ascending: false }).limit(5),
+    supabase.from('comparisons').select('*', { count: 'exact', head: true }),
   ])
 
-  const cars = (carsData || []) as unknown as Car[]
+  const cars = (carsData ?? []) as Car[]
   const offers = offersData || []
 
   const totalCars = cars.length
   const totalOffers = offers.length
+  const totalComparisons = comparisonCount ?? 0
 
   return (
     <div className="space-y-8">
@@ -71,7 +73,7 @@ export default async function DashboardPage() {
               </div>
               <div className="ml-4">
                 <p className="text-sm font-medium text-gray-500">Comparisons</p>
-                <p className="text-2xl font-semibold text-gray-900">0</p>
+                <p className="text-2xl font-semibold text-gray-900">{totalComparisons}</p>
               </div>
             </div>
           </Card>
